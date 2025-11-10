@@ -103,17 +103,24 @@ def cmd_list(args: argparse.Namespace) -> int:
         print("No tools available. Run 'nmsi update' to download installation scripts.")
         return 0
     
+    os_type = get_os_type()
+    arch = get_arch()
+    
     tools = []
     for tool_dir in INSTALL_DIR.iterdir():
         if tool_dir.is_dir():
-            tools.append(tool_dir.name)
+            # Check if install script exists for current OS/architecture
+            install_script_path = tool_dir / os_type / arch / "install.sh"
+            if install_script_path.exists():
+                tools.append(tool_dir.name)
     
     if not tools:
-        print("No tools available. Run 'nmsi update' to download installation scripts.")
+        print(f"No tools available for {os_type}/{arch}.")
+        print("Run 'nmsi update' to download installation scripts.")
         return 0
     
     tools.sort()
-    print("Available tools:")
+    print(f"Available tools for {os_type}/{arch}:")
     for tool in tools:
         print(f"  - {tool}")
     
@@ -226,9 +233,9 @@ def cmd_add(args: argparse.Namespace) -> int:
         print(f"Error: Not a file: {script_path}")
         return 1
     
-    # Get OS/architecture
-    os_type = get_os_type()
-    arch = get_arch()
+    # Get OS/architecture (use provided values or auto-detect)
+    os_type = args.os if args.os else get_os_type()
+    arch = args.arch if args.arch else get_arch()
     
     # Determine destination path
     ensure_install_dir()
@@ -326,6 +333,14 @@ def create_parser() -> argparse.ArgumentParser:
         "--name",
         required=True,
         help="Name of the tool"
+    )
+    add_parser.add_argument(
+        "--os",
+        help="OS type (default: auto-detect)"
+    )
+    add_parser.add_argument(
+        "--arch",
+        help="Architecture (default: auto-detect)"
     )
     add_parser.add_argument(
         "script",
