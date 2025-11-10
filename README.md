@@ -2,8 +2,7 @@
 
 No More Search for Installation. I am tired to search the same opens source 
 installation method again, again...
-This is a quick and dirty tool to install open source software. Registered
-scripts works anytime, anywhere? Nobody knows.
+This tool intends to be a quick and handy tool to install open source software.
 
 ## Installation
 

@@ -1,13 +1,29 @@
 [project]
 name = "nmsi"
 version = "0.1.0"
+authors = [
+    { name = "toru-nakai", email = "toru-nakai@users.noreply.github.com" }
+]
 description = "No More Search for Installation - Easy installation tool for open source software"
 readme = "README.md"
 requires-python = ">=3.6"
+license = "Apache-2.0"
 dependencies = []
+keywords = ["install", "tool", "snippet"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: System Administrators",
+    "Programming Language :: Python :: 3",
+]
+
+[project.urls]
+Homepage = "https://github.com/toru-nakai/nmsi"
+Repository = "https://github.com/toru-nakai/nmsi" # ソースコードの場所
+"Bug Tracker" = "https://github.com/toru-nakai/nmsi/issues" # バグ報告用のURL
 
 [project.scripts]
-nmsi = "main:main"
+nmsi = "nmsi:main"
 
 [tool.setuptools]
-py-modules = ["main"]
+package-dir = {"" = "src"}
+py-modules = ["nmsi"]
