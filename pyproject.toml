@@ -8,3 +8,6 @@ dependencies = []
 
 [project.scripts]
 nmsi = "main:main"
+
+[tool.setuptools]
+py-modules = ["main"]
