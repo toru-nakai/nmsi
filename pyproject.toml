@@ -1,6 +1,6 @@
 [project]
 name = "nmsi"
-version = "0.1.0"
+version = "0.1.1"
 authors = [
     { name = "toru-nakai", email = "toru-nakai@users.noreply.github.com" }
 ]
