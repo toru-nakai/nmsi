@@ -233,9 +233,9 @@ def cmd_add(args: argparse.Namespace) -> int:
         print(f"Error: Not a file: {script_path}")
         return 1
     
-    # Get OS/architecture
-    os_type = get_os_type()
-    arch = get_arch()
+    # Get OS/architecture (use provided values or auto-detect)
+    os_type = args.os if args.os else get_os_type()
+    arch = args.arch if args.arch else get_arch()
     
     # Determine destination path
     ensure_install_dir()
@@ -333,6 +333,14 @@ def create_parser() -> argparse.ArgumentParser:
         "--name",
         required=True,
         help="Name of the tool"
+    )
+    add_parser.add_argument(
+        "--os",
+        help="OS type (default: auto-detect)"
+    )
+    add_parser.add_argument(
+        "--arch",
+        help="Architecture (default: auto-detect)"
     )
     add_parser.add_argument(
         "script",
