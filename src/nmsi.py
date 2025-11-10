@@ -103,17 +103,24 @@ def cmd_list(args: argparse.Namespace) -> int:
         print("No tools available. Run 'nmsi update' to download installation scripts.")
         return 0
     
+    os_type = get_os_type()
+    arch = get_arch()
+    
     tools = []
     for tool_dir in INSTALL_DIR.iterdir():
         if tool_dir.is_dir():
-            tools.append(tool_dir.name)
+            # Check if install script exists for current OS/architecture
+            install_script_path = tool_dir / os_type / arch / "install.sh"
+            if install_script_path.exists():
+                tools.append(tool_dir.name)
     
     if not tools:
-        print("No tools available. Run 'nmsi update' to download installation scripts.")
+        print(f"No tools available for {os_type}/{arch}.")
+        print("Run 'nmsi update' to download installation scripts.")
         return 0
     
     tools.sort()
-    print("Available tools:")
+    print(f"Available tools for {os_type}/{arch}:")
     for tool in tools:
         print(f"  - {tool}")
     
