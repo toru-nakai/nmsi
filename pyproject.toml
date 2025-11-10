@@ -1,0 +1,10 @@
+[project]
+name = "nmsi"
+version = "0.1.0"
+description = "No More Search for Installation - Easy installation tool for open source software"
+readme = "README.md"
+requires-python = ">=3.6"
+dependencies = []
+
+[project.scripts]
+nmsi = "main:main"
