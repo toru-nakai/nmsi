@@ -10,6 +10,8 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+from downloader import Downloader
+
 
 # Constants
 def get_nmsi_base_dir() -> Path:
@@ -22,7 +24,7 @@ def get_nmsi_base_dir() -> Path:
 
 NMSI_BASE_DIR = get_nmsi_base_dir()
 INSTALL_DIR = NMSI_BASE_DIR / "install"
-GITHUB_REPO = "https://github.com/toru-nakai/nmsi"
+GITHUB_REPO = "git://github.com/toru-nakai/nmsi"
 
 def get_os_type() -> str:
     """Get OS type"""
@@ -126,76 +128,57 @@ def cmd_list(args: argparse.Namespace) -> int:
     return 0
 
 
-def download_install_scripts() -> int:
-    """Clone repository to NMSI_BASE_DIR"""
-    # Check if git command is available
-    if not shutil.which("git"):
-        raise RuntimeError("git command not found. Please install git.")
-    
-    # Check if repository already exists
-    git_dir = NMSI_BASE_DIR / ".git"
-    if git_dir.exists():
-        print("Updating repository...")
-        try:
-            subprocess.run(
-                ["git", "pull"],
-                check=True,
-                cwd=NMSI_BASE_DIR,
-                capture_output=True,
-                text=True
-            )
-            print("Repository updated successfully.")
-            return 0
-        except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"Failed to update repository: {e.stderr}")
-    elif NMSI_BASE_DIR.exists():
-        # Directory exists but is not a git repository
-        print(f"Directory {NMSI_BASE_DIR} exists but is not a git repository.")
-        response = input("Do you want to remove it and initialize? (y/N): ").strip().lower()
-        if response in ['y', 'yes']:
-            print(f"Removing {NMSI_BASE_DIR}...")
-            shutil.rmtree(NMSI_BASE_DIR)
-        else:
-            print("Cancelled.")
-            return 1
-    
-    # Clone repository
-    print("Cloning repository...")
-    # Ensure parent directory exists
-    NMSI_BASE_DIR.parent.mkdir(parents=True, exist_ok=True)
-    
-    try:
-        # Clone only the latest commit with git clone --depth=1
-        subprocess.run(
-            ["git", "clone", "--depth=1", GITHUB_REPO, str(NMSI_BASE_DIR)],
-            check=True,
-            capture_output=True,
-            text=True
-        )
-        print("Repository cloned successfully.")
-        return 0
-    except subprocess.CalledProcessError as e:
-        raise RuntimeError(f"Failed to clone repository: {e.stderr}")
-
-
 def cmd_update(args: argparse.Namespace) -> int:
     """Implementation of update command"""
-    print("Updating installation scripts from GitHub...")
-    print(f"Repository: {GITHUB_REPO}")
-    print()
-    
-    try:
-        download_install_scripts()
+    if args.from_url:
+        # Download from specified URL
+        print(f"Downloading installation scripts from {args.from_url}...")
+        print(f"Destination: {INSTALL_DIR}")
         print()
-        print("Update completed.")
-        return 0
         
-    except RuntimeError as e:
-        print(f"Error: {e}")
-        return 1
-    except Exception as e:
-        print(f"Error: {e}")
-        return 1
+        try:
+            downloader = Downloader.create_downloader(args.from_url, INSTALL_DIR)
+            result = downloader.download()
+            
+            if result == 0:
+                print()
+                print("Update completed.")
+            return result
+            
+        except ValueError as e:
+            print(f"Error: {e}")
+            return 1
+        except RuntimeError as e:
+            print(f"Error: {e}")
+            return 1
+        except Exception as e:
+            print(f"Error: {e}")
+            return 1
+    else:
+        # Default: download from GitHub
+        print("Updating installation scripts from GitHub...")
+        print(f"Repository: {GITHUB_REPO}")
+        print(f"Destination: {INSTALL_DIR}")
+        print()
+        
+        try:
+            downloader = Downloader.create_downloader(GITHUB_REPO, INSTALL_DIR)
+            result = downloader.download()
+            
+            if result == 0:
+                print()
+                print("Update completed.")
+            return result
+            
+        except ValueError as e:
+            print(f"Error: {e}")
+            return 1
+        except RuntimeError as e:
+            print(f"Error: {e}")
+            return 1
+        except Exception as e:
+            print(f"Error: {e}")
+            return 1
 
 
 def cmd_uninstall(args: argparse.Namespace) -> int:
@@ -305,7 +288,13 @@ def create_parser() -> argparse.ArgumentParser:
     # update command
     update_parser = subparsers.add_parser(
         "update",
-        help="Update installation scripts from GitHub"
+        help="Update installation scripts from GitHub or specified URL"
+    )
+    update_parser.add_argument(
+        "--from",
+        dest="from_url",
+        metavar="URL",
+        help="Download installation scripts from specified URL (supports http, https, file, git)"
     )
     update_parser.set_defaults(func=cmd_update)
     

@@ -26,4 +26,4 @@ nmsi = "nmsi:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-py-modules = ["nmsi"]
+py-modules = ["nmsi", "downloader"]
