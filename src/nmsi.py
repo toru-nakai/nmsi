@@ -7,7 +7,6 @@ import platform
 import shutil
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 from typing import Optional
 
@@ -127,62 +126,56 @@ def cmd_list(args: argparse.Namespace) -> int:
     return 0
 
 
-def download_install_scripts(local_base: Path = INSTALL_DIR) -> int:
-    """Download installation scripts from GitHub repository using git clone"""
+def download_install_scripts() -> int:
+    """Clone repository to NMSI_BASE_DIR"""
     # Check if git command is available
     if not shutil.which("git"):
         raise RuntimeError("git command not found. Please install git.")
     
-    # Create temporary directory
-    with tempfile.TemporaryDirectory() as temp_dir:
-        temp_path = Path(temp_dir)
-        repo_path = temp_path / "nmsi"
-        
-        print("Cloning repository...")
+    # Check if repository already exists
+    git_dir = NMSI_BASE_DIR / ".git"
+    if git_dir.exists():
+        print("Updating repository...")
         try:
-            # Clone only the latest commit with git clone --depth=1
             subprocess.run(
-                ["git", "clone", "--depth=1", GITHUB_REPO, str(repo_path)],
+                ["git", "pull"],
                 check=True,
+                cwd=NMSI_BASE_DIR,
                 capture_output=True,
                 text=True
             )
-        except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"Failed to clone repository: {e.stderr}")
-        
-        # Check if install directory exists
-        install_dir = repo_path / "install"
-        if not install_dir.exists():
+            print("Repository updated successfully.")
             return 0
-        
-        # Copy all install.sh files in install directory
-        downloaded_count = 0
-        
-        for install_script in install_dir.rglob("install.sh"):
-            # Extract tool_name/os_type/arch from path
-            # install/tool_name/os_type/arch/install.sh
-            try:
-                relative_path = install_script.relative_to(install_dir)
-                parts = relative_path.parts
-                
-                if len(parts) >= 4:  # tool_name/os_type/arch/install.sh
-                    tool_name = parts[0]
-                    os_type = parts[1]
-                    arch = parts[2]
-                    
-                    local_path = local_base / tool_name / os_type / arch / "install.sh"
-                    
-                    # Create directory and copy file
-                    local_path.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(install_script, local_path)
-                    local_path.chmod(0o755)  # Make executable
-                    
-                    downloaded_count += 1
-                    print(f"  ✓ {tool_name}/{os_type}/{arch}/install.sh")
-            except Exception as e:
-                print(f"  ✗ Failed to copy {install_script}: {e}")
-        
-        return downloaded_count
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"Failed to update repository: {e.stderr}")
+    elif NMSI_BASE_DIR.exists():
+        # Directory exists but is not a git repository
+        print(f"Directory {NMSI_BASE_DIR} exists but is not a git repository.")
+        response = input("Do you want to remove it and initialize? (y/N): ").strip().lower()
+        if response in ['y', 'yes']:
+            print(f"Removing {NMSI_BASE_DIR}...")
+            shutil.rmtree(NMSI_BASE_DIR)
+        else:
+            print("Cancelled.")
+            return 1
+    
+    # Clone repository
+    print("Cloning repository...")
+    # Ensure parent directory exists
+    NMSI_BASE_DIR.parent.mkdir(parents=True, exist_ok=True)
+    
+    try:
+        # Clone only the latest commit with git clone --depth=1
+        subprocess.run(
+            ["git", "clone", "--depth=1", GITHUB_REPO, str(NMSI_BASE_DIR)],
+            check=True,
+            capture_output=True,
+            text=True
+        )
+        print("Repository cloned successfully.")
+        return 0
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"Failed to clone repository: {e.stderr}")
 
 
 def cmd_update(args: argparse.Namespace) -> int:
@@ -191,18 +184,10 @@ def cmd_update(args: argparse.Namespace) -> int:
     print(f"Repository: {GITHUB_REPO}")
     print()
     
-    ensure_install_dir()
-    
     try:
-        downloaded_count = download_install_scripts()
-        
-        if downloaded_count == 0:
-            print("No installation scripts found in the repository.")
-            print(f"Expected structure: install/<tool_name>/<os_type>/<arch>/install.sh")
-            return 1
-        
+        download_install_scripts()
         print()
-        print(f"Update completed. Downloaded {downloaded_count} script(s).")
+        print("Update completed.")
         return 0
         
     except RuntimeError as e:
