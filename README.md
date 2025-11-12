@@ -42,6 +42,13 @@ Add a custom script
 nmsi add --name <tool_name> <script.sh>
 ```
 
+Download installation scripts from a custom URL. Archive file is only supported 
+like zip, tar, etc. for http). This option overrides current installation scripts.
+
+```bash
+nmsi update --from <url>
+```
+
 ## Configuration
 
 Set `NMSI_PATH` environment variable to customize the installation directory (default: `~/.local/share/nmsi`).
@@ -49,3 +56,11 @@ Set `NMSI_PATH` environment variable to customize the installation directory (de
 ```bash
 export NMSI_PATH="/custom/path"
 ```
+
+## License
+
+This project is licensed under the Apache License 2.0. See the [LICENSE](LICENSE) file for details.
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit an issue or pull request.
