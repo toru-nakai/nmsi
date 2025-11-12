@@ -10,7 +10,7 @@ jobs:
   run:
     runs-on: ubuntu-latest
     environment:
-      name: pypi
+      name: nmsi-publish
     permissions:
       id-token: write
       contents: read
