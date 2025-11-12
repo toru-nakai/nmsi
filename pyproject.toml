@@ -1,12 +1,12 @@
 [project]
 name = "nmsi"
-version = "0.1.2"
+version = "0.1.3"
 authors = [
     { name = "toru-nakai", email = "toru-nakai@users.noreply.github.com" }
 ]
 description = "No More Search for Installation - Easy installation tool for open source software"
 readme = "README.md"
-requires-python = ">=3.6"
+requires-python = ">=3.9"
 license = "Apache-2.0"
 dependencies = []
 keywords = ["install", "tool", "snippet"]
