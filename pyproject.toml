@@ -1,6 +1,6 @@
 [project]
 name = "nmsi"
-version = "0.1.4"
+version = "0.1.6"
 authors = [
     { name = "toru-nakai", email = "toru-nakai@users.noreply.github.com" }
 ]
@@ -27,3 +27,7 @@ nmsi = "nmsi:main"
 [tool.setuptools]
 package-dir = {"" = "src"}
 py-modules = ["nmsi", "downloader"]
+
+[tool.uv]
+package = true
+
