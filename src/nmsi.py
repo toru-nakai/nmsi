@@ -8,7 +8,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Dict, List, Optional, Tuple
 
 from downloader import Downloader
 
@@ -24,7 +24,16 @@ class NMSI:
             os_type: OS type (default: auto-detect)
             arch: Architecture (default: auto-detect)
         """
-        self.os_type = os_type if os_type else self._get_os_type()
+        detected_os_type, detected_flavors = self._detect_os_and_flavors()
+        if os_type:
+            normalized_os = os_type.lower()
+            self.os_type = normalized_os
+            self.os_flavors = [normalized_os]
+            if normalized_os != "linux":
+                self.os_flavors.append("linux")
+        else:
+            self.os_type = detected_os_type
+            self.os_flavors = detected_flavors
         self.arch = arch if arch else self._get_arch()
         self.base_dir = self._get_nmsi_base_dir()
         self.install_dir = self.base_dir / "install"
@@ -38,18 +47,75 @@ class NMSI:
             return Path(nmsi_path).expanduser()
         return Path.home() / ".local" / "share" / "nmsi"
     
-    @staticmethod
-    def _get_os_type() -> str:
-        """Get OS type"""
+    def _detect_os_and_flavors(self) -> Tuple[str, List[str]]:
+        """Get OS type and ordered list of flavor fallbacks"""
         system = platform.system().lower()
         if system == "darwin":
-            return "macos"
+            return "macos", ["macos"]
         elif system == "linux":
-            return "linux"
+            flavors = self._detect_linux_flavors()
+            primary = flavors[0] if flavors else "linux"
+            return primary, flavors or ["linux"]
         elif system == "windows":
-            return "windows"
+            return "windows", ["windows"]
         else:
-            return system
+            return system, [system]
+
+    @staticmethod
+    def _detect_linux_flavors() -> List[str]:
+        """Detect Linux distribution flavors ordered by specificity"""
+        info = {}
+        try:
+            info = platform.freedesktop_os_release()
+        except (AttributeError, FileNotFoundError):
+            info = NMSI._read_os_release_file()
+
+        flavors: List[str] = []
+        base_id = info.get("ID", "linux").lower()
+        version_id = info.get("VERSION_ID", "").strip().strip('"')
+        version_major = version_id.split(".")[0] if version_id else ""
+
+        def add_flavor(name: str):
+            if name and name not in flavors:
+                flavors.append(name)
+
+        if base_id:
+            if version_major:
+                add_flavor(f"{base_id}{version_major}")
+            add_flavor(base_id)
+
+        id_like = info.get("ID_LIKE", "")
+        if id_like:
+            for like in id_like.split():
+                like = like.lower()
+                if version_major:
+                    add_flavor(f"{like}{version_major}")
+                add_flavor(like)
+
+        add_flavor("linux")
+        return flavors
+
+    @staticmethod
+    def _read_os_release_file() -> Dict[str, str]:
+        """Read /etc/os-release style file into dict"""
+        paths = [Path("/etc/os-release"), Path("/usr/lib/os-release")]
+        for path in paths:
+            if not path.exists():
+                continue
+            data: Dict[str, str] = {}
+            try:
+                for line in path.read_text().splitlines():
+                    line = line.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    key, value = line.split("=", 1)
+                    value = value.strip().strip('"')
+                    data[key] = value
+                if data:
+                    return data
+            except OSError:
+                continue
+        return {}
     
     @staticmethod
     def _get_arch() -> str:
@@ -71,20 +137,32 @@ class NMSI:
         """Ensure installation directory exists"""
         self.install_dir.mkdir(parents=True, exist_ok=True)
         return self.install_dir
+
+    def _find_install_script(self, tool_name: str) -> Tuple[Optional[Path], Optional[str]]:
+        """Find install script path considering OS flavor fallbacks"""
+        for os_name in self.os_flavors:
+            install_script_path = self.install_dir / tool_name / os_name / self.arch / "install.sh"
+            if install_script_path.exists():
+                return install_script_path, os_name
+        return None, None
     
     def cmd_install(self, args: argparse.Namespace) -> int:
         """Implementation of install command"""
         tool_name = args.tool_name
-        
-        install_script_path = self.install_dir / tool_name / self.os_type / self.arch / "install.sh"
-        
-        if not install_script_path.exists():
+
+        install_script_path, resolved_os = self._find_install_script(tool_name)
+
+        if not install_script_path:
+            expected_path = self.install_dir / tool_name / self.os_type / self.arch / "install.sh"
             print(f"Error: Installation script not found for {tool_name} on {self.os_type}/{self.arch}")
-            print(f"Expected path: {install_script_path}")
+            print(f"Expected primary path: {expected_path}")
+            print(f"Tried OS flavors: {', '.join(self.os_flavors)}")
             print(f"Run 'nmsi update' to download installation scripts.")
             return 1
-        
-        print(f"Installing {tool_name} for {self.os_type}/{self.arch}...")
+
+        print(f"Installing {tool_name} for {resolved_os}/{self.arch}...")
+        if resolved_os != self.os_type:
+            print(f"Note: Falling back from {self.os_type} to {resolved_os}.")
         print(f"Running: {install_script_path}")
         
         # Execute the script
@@ -115,8 +193,8 @@ class NMSI:
         for tool_dir in self.install_dir.iterdir():
             if tool_dir.is_dir():
                 # Check if install script exists for current OS/architecture
-                install_script_path = tool_dir / self.os_type / self.arch / "install.sh"
-                if install_script_path.exists():
+                install_script_path, _ = self._find_install_script(tool_dir.name)
+                if install_script_path:
                     tools.append(tool_dir.name)
         
         if not tools:
@@ -230,16 +308,18 @@ class NMSI:
         """Implementation of show command"""
         tool_name = args.tool_name
         
-        install_script_path = self.install_dir / tool_name / self.os_type / self.arch / "install.sh"
+        install_script_path, resolved_os = self._find_install_script(tool_name)
         
-        if not install_script_path.exists():
+        if not install_script_path:
+            expected_path = self.install_dir / tool_name / self.os_type / self.arch / "install.sh"
             print(f"Error: Installation script not found for {tool_name} on {self.os_type}/{self.arch}")
-            print(f"Expected path: {install_script_path}")
+            print(f"Expected primary path: {expected_path}")
+            print(f"Tried OS flavors: {', '.join(self.os_flavors)}")
             return 1
         
         try:
             script_content = install_script_path.read_text()
-            print(f"# Installation script for {tool_name} ({self.os_type}/{self.arch})")
+            print(f"# Installation script for {tool_name} ({resolved_os}/{self.arch})")
             print(f"# Path: {install_script_path}")
             print()
             print(script_content)
