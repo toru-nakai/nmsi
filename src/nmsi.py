@@ -47,7 +47,6 @@ class NMSI:
             return Path(nmsi_path).expanduser()
         return Path.home() / ".local" / "share" / "nmsi"
     
-    @staticmethod
     def _detect_os_and_flavors(self) -> Tuple[str, List[str]]:
         """Get OS type and ordered list of flavor fallbacks"""
         system = platform.system().lower()
