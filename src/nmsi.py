@@ -196,23 +196,53 @@ class NMSI:
             print("No tools available. Run 'nmsi update' to download installation scripts.")
             return 0
         
-        tools = []
-        for tool_dir in self.install_dir.iterdir():
-            if tool_dir.is_dir():
-                # Check if install script exists for current OS/architecture
-                install_script_path, _, _ = self._find_install_script(tool_dir.name)
-                if install_script_path:
-                    tools.append(tool_dir.name)
-        
-        if not tools:
-            print(f"No tools available for {self.os_type}/{self.arch}.")
-            print("Run 'nmsi update' to download installation scripts.")
-            return 0
-        
-        tools.sort()
-        print(f"Available tools for {self.os_type}/{self.arch}:")
-        for tool in tools:
-            print(f"  - {tool}")
+        if args.all:
+            # List all tools regardless of OS/architecture
+            tools = []
+            for tool_dir in self.install_dir.iterdir():
+                if tool_dir.is_dir():
+                    # Check if any install script exists
+                    has_script = False
+                    for os_dir in tool_dir.iterdir():
+                        if os_dir.is_dir():
+                            for arch_dir in os_dir.iterdir():
+                                if arch_dir.is_dir():
+                                    script_path = arch_dir / "install.sh"
+                                    if script_path.exists():
+                                        has_script = True
+                                        break
+                            if has_script:
+                                break
+                    if has_script:
+                        tools.append(tool_dir.name)
+            
+            if not tools:
+                print("No tools available. Run 'nmsi update' to download installation scripts.")
+                return 0
+            
+            tools.sort()
+            print("All available tools:")
+            for tool in tools:
+                print(f"  - {tool}")
+        else:
+            # List tools for current OS/architecture
+            tools = []
+            for tool_dir in self.install_dir.iterdir():
+                if tool_dir.is_dir():
+                    # Check if install script exists for current OS/architecture
+                    install_script_path, _, _ = self._find_install_script(tool_dir.name)
+                    if install_script_path:
+                        tools.append(tool_dir.name)
+            
+            if not tools:
+                print(f"No tools available for {self.os_type}/{self.arch}.")
+                print("Run 'nmsi update' to download installation scripts.")
+                return 0
+            
+            tools.sort()
+            print(f"Available tools for {self.os_type}/{self.arch}:")
+            for tool in tools:
+                print(f"  - {tool}")
         
         return 0
     
@@ -364,6 +394,11 @@ class NMSI:
         list_parser = subparsers.add_parser(
             "list",
             help="List available tools"
+        )
+        list_parser.add_argument(
+            "-a", "--all",
+            action="store_true",
+            help="List all tools regardless of OS/architecture"
         )
         list_parser.set_defaults(func=self.cmd_list)
         
