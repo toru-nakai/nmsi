@@ -138,19 +138,24 @@ class NMSI:
         self.install_dir.mkdir(parents=True, exist_ok=True)
         return self.install_dir
 
-    def _find_install_script(self, tool_name: str) -> Tuple[Optional[Path], Optional[str]]:
-        """Find install script path considering OS flavor fallbacks"""
+    def _find_install_script(self, tool_name: str) -> Tuple[Optional[Path], Optional[str], Optional[str]]:
+        """Find install script path considering OS flavor and architecture fallbacks"""
         for os_name in self.os_flavors:
+            # First try with specific architecture
             install_script_path = self.install_dir / tool_name / os_name / self.arch / "install.sh"
             if install_script_path.exists():
-                return install_script_path, os_name
-        return None, None
+                return install_script_path, os_name, self.arch
+            # Fallback to general architecture if specific arch not found
+            general_script_path = self.install_dir / tool_name / os_name / "general" / "install.sh"
+            if general_script_path.exists():
+                return general_script_path, os_name, "general"
+        return None, None, None
     
     def cmd_install(self, args: argparse.Namespace) -> int:
         """Implementation of install command"""
         tool_name = args.tool_name
 
-        install_script_path, resolved_os = self._find_install_script(tool_name)
+        install_script_path, resolved_os, resolved_arch = self._find_install_script(tool_name)
 
         if not install_script_path:
             expected_path = self.install_dir / tool_name / self.os_type / self.arch / "install.sh"
@@ -160,9 +165,11 @@ class NMSI:
             print(f"Run 'nmsi update' to download installation scripts.")
             return 1
 
-        print(f"Installing {tool_name} for {resolved_os}/{self.arch}...")
+        print(f"Installing {tool_name} for {resolved_os}/{resolved_arch}...")
         if resolved_os != self.os_type:
             print(f"Note: Falling back from {self.os_type} to {resolved_os}.")
+        if resolved_arch != self.arch:
+            print(f"Note: Falling back from {self.arch} to {resolved_arch}.")
         print(f"Running: {install_script_path}")
         
         # Execute the script
@@ -193,7 +200,7 @@ class NMSI:
         for tool_dir in self.install_dir.iterdir():
             if tool_dir.is_dir():
                 # Check if install script exists for current OS/architecture
-                install_script_path, _ = self._find_install_script(tool_dir.name)
+                install_script_path, _, _ = self._find_install_script(tool_dir.name)
                 if install_script_path:
                     tools.append(tool_dir.name)
         
@@ -308,7 +315,7 @@ class NMSI:
         """Implementation of show command"""
         tool_name = args.tool_name
         
-        install_script_path, resolved_os = self._find_install_script(tool_name)
+        install_script_path, resolved_os, resolved_arch = self._find_install_script(tool_name)
         
         if not install_script_path:
             expected_path = self.install_dir / tool_name / self.os_type / self.arch / "install.sh"
@@ -319,7 +326,7 @@ class NMSI:
         
         try:
             script_content = install_script_path.read_text()
-            print(f"# Installation script for {tool_name} ({resolved_os}/{self.arch})")
+            print(f"# Installation script for {tool_name} ({resolved_os}/{resolved_arch})")
             print(f"# Path: {install_script_path}")
             print()
             print(script_content)
