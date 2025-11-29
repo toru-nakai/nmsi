@@ -138,31 +138,115 @@ class NMSI:
         self.install_dir.mkdir(parents=True, exist_ok=True)
         return self.install_dir
 
-    def _find_install_script(self, tool_name: str) -> Tuple[Optional[Path], Optional[str], Optional[str]]:
+    @staticmethod
+    def _get_repo_name_from_url(url: str) -> str:
         """
-        Find install script path considering OS flavor and architecture fallbacks.
-        
-        Search priority:
-        1. {tool_name}/{os}/{arch}/install.sh (OS/architecture specific)
-        2. {tool_name}/{os}/general/install.sh (OS specific, architecture independent)
-        3. {tool_name}/universal/{arch}/install.sh (OS independent, architecture specific)
-        4. {tool_name}/universal/general/install.sh (OS/architecture independent)
+        Get repository name from URL or path.
+
+        Examples:
+            git@github.com:user/repo.git -> repo
+            git://github.com/user/repo.git -> repo
+            https://github.com/user/repo.git -> repo
+            https://github.com/user/repo.tar -> repo
+            file:///path/to/repo -> repo
+        """
+        # git@ style (SSH)
+        if url.startswith("git@"):
+            path = url.split(":", 1)[-1]
+        else:
+            # Other URLs (including file://)
+            from urllib.parse import urlparse
+
+            parsed = urlparse(url)
+            if parsed.scheme:
+                path = parsed.path
+            else:
+                # Fallback: treat as plain path
+                path = url
+
+        # Remove trailing slashes
+        path = path.rstrip("/")
+        if not path:
+            raise ValueError(f"Invalid URL for repository name: {url}")
+
+        # Take the last component (basename)
+        name = path.split("/")[-1]
+
+        # Strip .git suffix if present (and common archive extensions)
+        if "." in name:
+            name = name.split(".")[0]
+
+        if not name:
+            raise ValueError(f"Invalid URL for repository name: {url}")
+
+        return name
+
+    def _iter_install_roots(self) -> List[Path]:
+        """
+        Iterate install roots in search order.
+
+        Order:
+            1. Directories under install_dir whose name starts with '@' (sorted)
+            2. The standard install_dir itself
+        """
+        roots: List[Path] = []
+        if not self.install_dir.exists():
+            return roots
+
+        # @-prefixed repositories
+        repo_dirs = [
+            d for d in self.install_dir.iterdir()
+            if d.is_dir() and d.name.startswith("@")
+        ]
+        for d in sorted(repo_dirs, key=lambda p: p.name):
+            roots.append(d)
+
+        # Standard install directory
+        roots.append(self.install_dir)
+        return roots
+
+    def _find_install_script_in_root(
+        self, root: Path, tool_name: str
+    ) -> Tuple[Optional[Path], Optional[str], Optional[str]]:
+        """
+        Find install script under a specific root directory.
         """
         for os_name in self.os_flavors:
-            install_script_path = self.install_dir / tool_name / os_name / self.arch / "install.sh"
+            install_script_path = root / tool_name / os_name / self.arch / "install.sh"
             if install_script_path.exists():
                 return install_script_path, os_name, self.arch
-            general_script_path = self.install_dir / tool_name / os_name / "general" / "install.sh"
+            general_script_path = root / tool_name / os_name / "general" / "install.sh"
             if general_script_path.exists():
                 return general_script_path, os_name, "general"
-        
-        universal_arch_path = self.install_dir / tool_name / "universal" / self.arch / "install.sh"
+
+        universal_arch_path = root / tool_name / "universal" / self.arch / "install.sh"
         if universal_arch_path.exists():
             return universal_arch_path, "universal", self.arch
-        universal_general_path = self.install_dir / tool_name / "universal" / "general" / "install.sh"
+        universal_general_path = root / tool_name / "universal" / "general" / "install.sh"
         if universal_general_path.exists():
             return universal_general_path, "universal", "general"
-        
+
+        return None, None, None
+
+    def _find_install_script(self, tool_name: str) -> Tuple[Optional[Path], Optional[str], Optional[str]]:
+        """
+        Find install script path considering repositories, OS flavor and architecture fallbacks.
+
+        Search order:
+            1. @-prefixed repositories under install_dir (alphabetical order)
+            2. Standard install_dir
+
+        Within each root, the priority is:
+            1. {tool_name}/{os}/{arch}/install.sh (OS/architecture specific)
+            2. {tool_name}/{os}/general/install.sh (OS specific, architecture independent)
+            3. {tool_name}/universal/{arch}/install.sh (OS independent, architecture specific)
+            4. {tool_name}/universal/general/install.sh (OS/architecture independent)
+        """
+        for root in self._iter_install_roots():
+            script_path, os_name, arch = self._find_install_script_in_root(root, tool_name)
+            if script_path:
+                return script_path, os_name, arch
+
         return None, None, None
     
     def cmd_install(self, args: argparse.Namespace) -> int:
@@ -209,44 +293,52 @@ class NMSI:
         if not self.install_dir.exists():
             print("No tools available. Run 'nmsi update' to download installation scripts.")
             return 0
-        
+
+        def _has_any_install_script(tool_root: Path) -> bool:
+            """Check if any install.sh exists under the given tool root."""
+            for path in tool_root.rglob("install.sh"):
+                if path.is_file():
+                    return True
+            return False
+
         if args.all:
             # List all tools regardless of OS/architecture
-            tools = []
-            for tool_dir in self.install_dir.iterdir():
-                if tool_dir.is_dir():
-                    # Check if any install script exists
-                    has_script = False
-                    for os_dir in tool_dir.iterdir():
-                        if os_dir.is_dir():
-                            for arch_dir in os_dir.iterdir():
-                                if arch_dir.is_dir():
-                                    script_path = arch_dir / "install.sh"
-                                    if script_path.exists():
-                                        has_script = True
-                                        break
-                            if has_script:
-                                break
-                    if has_script:
-                        tools.append(tool_dir.name)
+            tools = set()
+            for root in self._iter_install_roots():
+                for entry in root.iterdir():
+                    if not entry.is_dir():
+                        continue
+                    # Skip nested @-repositories when scanning tools
+                    if entry.name.startswith("@"):
+                        continue
+                    if _has_any_install_script(entry):
+                        tools.add(entry.name)
             
             if not tools:
                 print("No tools available. Run 'nmsi update' to download installation scripts.")
                 return 0
             
-            tools.sort()
+            tools = sorted(tools)
             print("All available tools:")
             for tool in tools:
                 print(f"  - {tool}")
         else:
             # List tools for current OS/architecture
+            tool_names: set[str] = set()
+            for root in self._iter_install_roots():
+                for entry in root.iterdir():
+                    if not entry.is_dir():
+                        continue
+                    if entry.name.startswith("@"):
+                        continue
+                    tool_names.add(entry.name)
+
             tools = []
-            for tool_dir in self.install_dir.iterdir():
-                if tool_dir.is_dir():
-                    # Check if install script exists for current OS/architecture
-                    install_script_path, _, _ = self._find_install_script(tool_dir.name)
-                    if install_script_path:
-                        tools.append(tool_dir.name)
+            for name in tool_names:
+                # Check if install script exists for current OS/architecture
+                install_script_path, _, _ = self._find_install_script(name)
+                if install_script_path:
+                    tools.append(name)
             
             if not tools:
                 print(f"No tools available for {self.os_type}/{self.arch}.")
@@ -264,12 +356,15 @@ class NMSI:
         """Implementation of update command"""
         if args.from_url:
             # Download from specified URL
+            repo_name = self._get_repo_name_from_url(args.from_url)
+            repo_dir = self.install_dir / f"@{repo_name}"
+
             print(f"Downloading installation scripts from {args.from_url}...")
-            print(f"Destination: {self.install_dir}")
+            print(f"Destination: {repo_dir}")
             print()
             
             try:
-                downloader = Downloader.create_downloader(args.from_url, self.install_dir)
+                downloader = Downloader.create_downloader(args.from_url, repo_dir)
                 result = downloader.download()
                 
                 if result == 0:

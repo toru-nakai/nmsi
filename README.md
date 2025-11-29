@@ -42,6 +42,38 @@ Add a custom script
 nmsi add --name <tool_name> <script.sh>
 ```
 
+## Add your own installation scripts as a repository
+
+NMSI supports to update installation scripts from a your own repository.
+The repository name is generated from basename of the repository URL.
+Supported schemes are http, https, file, git.
+
+```bash
+nmsi update --from git@github.com:myusername/myapp.git
+```
+
+For example, you can prepare a source repository as follows:
+
+```
+myapp
+├── linux
+│   ├── general
+│   │   └── install.sh
+│   └── x86_64
+│       └── install.sh
+└── macos
+    ├── general
+    │   └── install.sh
+    └── arm64
+        └── install.sh
+```
+
+## List your own repositories
+
+```bash
+nmsi list --all
+```
+
 ## Configuration
 
 Set `NMSI_PATH` environment variable to customize the installation directory (default: `~/.local/share/nmsi`).
