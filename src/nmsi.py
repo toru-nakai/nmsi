@@ -139,16 +139,30 @@ class NMSI:
         return self.install_dir
 
     def _find_install_script(self, tool_name: str) -> Tuple[Optional[Path], Optional[str], Optional[str]]:
-        """Find install script path considering OS flavor and architecture fallbacks"""
+        """
+        Find install script path considering OS flavor and architecture fallbacks.
+        
+        Search priority:
+        1. {tool_name}/{os}/{arch}/install.sh (OS/architecture specific)
+        2. {tool_name}/{os}/general/install.sh (OS specific, architecture independent)
+        3. {tool_name}/universal/{arch}/install.sh (OS independent, architecture specific)
+        4. {tool_name}/universal/general/install.sh (OS/architecture independent)
+        """
         for os_name in self.os_flavors:
-            # First try with specific architecture
             install_script_path = self.install_dir / tool_name / os_name / self.arch / "install.sh"
             if install_script_path.exists():
                 return install_script_path, os_name, self.arch
-            # Fallback to general architecture if specific arch not found
             general_script_path = self.install_dir / tool_name / os_name / "general" / "install.sh"
             if general_script_path.exists():
                 return general_script_path, os_name, "general"
+        
+        universal_arch_path = self.install_dir / tool_name / "universal" / self.arch / "install.sh"
+        if universal_arch_path.exists():
+            return universal_arch_path, "universal", self.arch
+        universal_general_path = self.install_dir / tool_name / "universal" / "general" / "install.sh"
+        if universal_general_path.exists():
+            return universal_general_path, "universal", "general"
+        
         return None, None, None
     
     def cmd_install(self, args: argparse.Namespace) -> int:
